@@ -1,5 +1,7 @@
 <?php
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
 use Sammyjo20\Saloon\Clients\MockClient;
 use Sammyjo20\Saloon\Helpers\Pool;
 use Sammyjo20\Saloon\Http\MockResponse;
@@ -45,9 +47,7 @@ test('you can provide a generator when sending requests to the pool', function (
 
     $requests = function ($total) use ($mockClient) {
         for ($i = 0; $i < $total; $i++) {
-            yield function() use ($mockClient) {
-                return UserRequest::make()->sendAsync($mockClient);
-            };
+            yield UserRequest::make()->sendAsync($mockClient);
         }
     };
 
@@ -59,8 +59,36 @@ test('you can provide a generator when sending requests to the pool', function (
         })
         ->onFailure(function ($error) {
             ray($error)->red();
-        })
-        ->setConcurrency(3);
+        });
 
     $pool->promise()->wait();
+});
+
+test('you can add a request or an iterator after you have created the pool', function () {
+
+});
+
+test('the guzzle way', function () {
+    $requests = function ($total) {
+        for ($i = 0; $i < $total; $i++) {
+            yield UserRequest::make()->sendAsync();
+        }
+    };
+
+    $pool = Pool::make([
+        UserRequest::make(),
+        UserRequest::make(),
+        UserRequest::make(),
+        UserRequest::make(),
+        UserRequest::make(),
+    ])
+        ->onSuccess(function ($res, $index) {
+            ray($index, $res->json());
+        })
+        ->onFailure(function ($res, $index) {
+            ray($index, $res)->red();
+        })
+        ->setConcurrency(5);
+
+    $p = $pool->promise()->wait();
 });

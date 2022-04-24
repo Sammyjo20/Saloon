@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Promise\Promise;
+use GuzzleHttp\Promise\Utils;
 use Sammyjo20\Saloon\Http\MockResponse;
 use Sammyjo20\Saloon\Clients\MockClient;
 use Sammyjo20\Saloon\Http\SaloonResponse;
@@ -129,4 +130,27 @@ test('if a connection exception happens it will be provided in the rejection han
     } catch (\Exception $ex) {
         //
     }
+});
+
+test('multiple requests can be made at once', function () {
+    $mockClient = new MockClient([
+        MockResponse::make(['name' => 'A']),
+        MockResponse::make(['name' => 'B']),
+        MockResponse::make(['name' => 'C']),
+        MockResponse::make(['name' => 'D']),
+    ]);
+
+    $requests = [
+        'a' => UserRequest::make()->sendAsync($mockClient),
+        'b' => UserRequest::make()->sendAsync($mockClient),
+        'c' => UserRequest::make()->sendAsync($mockClient),
+        'd' => UserRequest::make()->sendAsync($mockClient),
+    ];
+
+    $responses = Utils::unwrap($requests);
+
+    expect($responses['a']->json())->toEqual(['name' => 'A']);
+    expect($responses['b']->json())->toEqual(['name' => 'B']);
+    expect($responses['c']->json())->toEqual(['name' => 'C']);
+    expect($responses['d']->json())->toEqual(['name' => 'D']);
 });

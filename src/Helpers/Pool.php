@@ -10,6 +10,7 @@ use Sammyjo20\Saloon\Http\SaloonConnector;
 use \Iterator;
 use Sammyjo20\Saloon\Http\SaloonRequest;
 use InvalidArgumentException;
+use Sammyjo20\Saloon\Http\SaloonResponse;
 
 class Pool
 {
@@ -20,7 +21,7 @@ class Pool
     /**
      * @var MockClient
      */
-    protected MockClient $mockClient;
+    protected ?MockClient $mockClient = null;
 
     protected $onSuccess = null;
     protected $onFailure = null;
@@ -125,13 +126,17 @@ class Pool
                 }
 
                 foreach ($request as $item) {
-                    $request = $item();
+                    if ($item instanceof SaloonRequest) {
+                        yield $item->sendAsync();
 
-                    if (! $request instanceof Promise) {
+                        continue;
+                    }
+
+                    if (! $item instanceof Promise) {
                         throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return promises.');
                     }
 
-                    yield $request;
+                    yield $item;
                 }
             }
         };

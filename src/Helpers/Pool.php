@@ -5,6 +5,7 @@ namespace Sammyjo20\Saloon\Helpers;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\EachPromise;
 use GuzzleHttp\Promise\Promise;
+use GuzzleHttp\Promise\PromiseInterface;
 use Sammyjo20\Saloon\Clients\MockClient;
 use Sammyjo20\Saloon\Http\SaloonConnector;
 use \Iterator;
@@ -14,19 +15,30 @@ use Sammyjo20\Saloon\Http\SaloonResponse;
 
 class Pool
 {
-    protected int $concurrency = 5;
-
-    protected array $iterables = [];
+    /**
+     * @var array
+     */
+    protected array $objects = [];
 
     /**
-     * @var MockClient
+     * @var MockClient|null
      */
     protected ?MockClient $mockClient = null;
 
-    protected $onSuccess = null;
-    protected $onFailure = null;
+    /**
+     * @var null
+     */
+    protected mixed $onSuccess = null;
 
-    protected SaloonConnector $connector;
+    /**
+     * @var null
+     */
+    protected mixed $onFailure = null;
+
+    /**
+     * @var int
+     */
+    protected int $concurrency = 5;
 
     /**
      * @param Iterator|array $requests
@@ -58,9 +70,9 @@ class Pool
     public function addRequests(Iterator|array $requests): self
     {
         if ($requests instanceof Iterator) {
-            $this->iterables[] = $requests;
+            $this->objects[] = $requests;
         } else {
-            $this->iterables = array_merge($this->iterables, $requests);
+            $this->objects = array_merge($this->objects, $requests);
         }
 
         return $this;
@@ -68,7 +80,7 @@ class Pool
 
     public function addRequest(SaloonRequest $request): self
     {
-        $this->requests[] = $request;
+        $this->addRequests([$request]);
 
         return $this;
     }
@@ -94,55 +106,65 @@ class Pool
         return $this;
     }
 
-    public function withConnector(SaloonConnector $connector): self
-    {
-        $this->connector = $connector;
-
-        return $this;
-    }
-
     /**
-     *
+     * Create the generator that returns the requests.
      *
      * @return callable
      */
-    private function createRequestIterator(): callable
+    protected function createRequestIterator(): callable
     {
-        $iterables = array_values($this->iterables);
+        $objects = Create::iterFor($this->objects);
         $mockClient = $this->mockClient;
 
-        return static function () use ($iterables, $mockClient) {
-            foreach ($iterables as $request) {
-                $isRequestIterable = $request instanceof Iterator;
+        $objects = $objects[0];
 
-                if (! $isRequestIterable) {
-                    if (! $request instanceof SaloonRequest) {
-                        throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return SaloonRequests.');
-                    }
+        return function () use ($objects, $mockClient) {
+            foreach ($objects as $key => $object) {
+                // Let's firstly check if the object provided is an iterator
+                // which is most likely a generator. If it isn't, it will
+                // just be a request - so we will run this.
 
-                    yield $request->sendAsync($mockClient);
+                if (! $object instanceof Iterator) {
+                    $this->validateRequest($object);
+
+                    yield $object->sendAsync($mockClient);
 
                     continue;
                 }
 
-                foreach ($request as $item) {
-                    if ($item instanceof SaloonRequest) {
-                        yield $item->sendAsync();
+                // However, if the object is iterable - we can loop through
+                // it and then yield each of the requests inside. If one
+                // of the object is not a request, we will throw an
+                // exception.
 
-                        continue;
-                    }
+                foreach ($object as $nestedObject) {
+                    $this->validateRequest($nestedObject);
 
-                    if (! $item instanceof Promise) {
-                        throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return promises.');
-                    }
-
-                    yield $item;
+                    yield $nestedObject->sendAsync($mockClient);
                 }
             }
         };
     }
 
-    public function promise()
+    /**
+     * Throw an exception if the provided value is not a SaloonRequest.
+     *
+     * @param mixed $request
+     * @return void
+     */
+    private function validateRequest(mixed $request): void
+    {
+        if (! $request instanceof SaloonRequest) {
+            throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return SaloonRequests.');
+        }
+    }
+
+    /**
+     * Create the pool promise.
+     *
+     * @return PromiseInterface
+     */
+    public function promise(): PromiseInterface
     {
         $requests = $this->createRequestIterator();
 

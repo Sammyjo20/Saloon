@@ -40,6 +40,7 @@ test('you can provide a generator when sending requests to the pool', function (
         MockResponse::make(['name' => 'Michael']),
         MockResponse::make(['name' => 'Gareth'], 500),
         MockResponse::make(['name' => 'Mantas']),
+        MockResponse::make(['name' => 'Teo']),
     ]);
 
     $requests = function ($total) use ($mockClient) {
@@ -50,7 +51,7 @@ test('you can provide a generator when sending requests to the pool', function (
         }
     };
 
-    $pool = Pool::make($requests(4), $mockClient)
+    $pool = Pool::make($requests(5), $mockClient)
         ->onSuccess(function ($value) {
             ray($value->json());
 
@@ -58,7 +59,8 @@ test('you can provide a generator when sending requests to the pool', function (
         })
         ->onFailure(function ($error) {
             ray($error)->red();
-        });
+        })
+        ->setConcurrency(3);
 
     $pool->promise()->wait();
 });

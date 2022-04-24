@@ -4,6 +4,7 @@ namespace Sammyjo20\Saloon\Helpers;
 
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\EachPromise;
+use GuzzleHttp\Promise\Promise;
 use Sammyjo20\Saloon\Clients\MockClient;
 use Sammyjo20\Saloon\Http\SaloonConnector;
 use \Iterator;
@@ -110,21 +111,27 @@ class Pool
         $mockClient = $this->mockClient;
 
         return static function () use ($iterables, $mockClient) {
-            foreach ($iterables as $iterable) {
-                $isItemIterable = $iterable instanceof Iterator;
+            foreach ($iterables as $request) {
+                $isRequestIterable = $request instanceof Iterator;
 
-                if ($isItemIterable) {
-                    foreach ($iterable as $item) {
-                        yield $item();
+                if (! $isRequestIterable) {
+                    if (! $request instanceof SaloonRequest) {
+                        throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return SaloonRequests.');
                     }
+
+                    yield $request->sendAsync($mockClient);
 
                     continue;
                 }
 
-                if ($item instanceof SaloonRequest) {
-                    yield $item->sendAsync($mockClient);
-                } else {
-                    throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return SaloonRequests.');
+                foreach ($request as $item) {
+                    $request = $item();
+
+                    if (! $request instanceof Promise) {
+                        throw new InvalidArgumentException('The pool must only contain SaloonRequests or iterator functions that return promises.');
+                    }
+
+                    yield $request;
                 }
             }
         };

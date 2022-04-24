@@ -6,6 +6,7 @@ use Sammyjo20\Saloon\Clients\MockClient;
 use Sammyjo20\Saloon\Helpers\Pool;
 use Sammyjo20\Saloon\Http\MockResponse;
 use Sammyjo20\Saloon\Http\SaloonResponse;
+use Sammyjo20\Saloon\Tests\Fixtures\Requests\ErrorRequest;
 use Sammyjo20\Saloon\Tests\Fixtures\Requests\UserRequest;
 
 test('a request pool can send multiple requests concurrently', function () {
@@ -78,7 +79,7 @@ test('the guzzle way', function () {
     $pool = Pool::make([
         UserRequest::make(),
         UserRequest::make(),
-        UserRequest::make(),
+        ErrorRequest::make(),
         UserRequest::make(),
         UserRequest::make(),
     ])
@@ -90,5 +91,7 @@ test('the guzzle way', function () {
         })
         ->setConcurrency(5);
 
-    $p = $pool->promise()->wait();
+    $p = $pool->promise();
+
+    dd($p->wait());
 });

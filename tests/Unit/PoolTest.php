@@ -4,7 +4,9 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\Utils;
 use Sammyjo20\Saloon\Clients\MockClient;
+use Sammyjo20\Saloon\Exceptions\SaloonRequestException;
 use Sammyjo20\Saloon\Helpers\Pool;
+use Sammyjo20\Saloon\Helpers\PoolNew;
 use Sammyjo20\Saloon\Http\MockResponse;
 use Sammyjo20\Saloon\Http\SaloonResponse;
 use Sammyjo20\Saloon\Tests\Fixtures\Requests\ErrorRequest;
@@ -53,42 +55,48 @@ test('you can provide a generator when sending requests to the pool', function (
         }
     };
 
-    $pool = Pool::make($requests(5), $mockClient)
-        ->onSuccess(function ($value) {
-            ray($value->json());
+    $pool = new Pool(
+        $requests(5),
+        null,
+        function ($value, $i) {
+            ray($i, $value->json());
 
             return $value;
-        })
-        ->onFailure(function ($error) {
-            ray($error)->red();
-        });
+        },
+        function ($error, $i) {
+            ray($i, $error)->red();
+        }
+    );
 
-    $pool->promise()->wait();
+    $pool->each->promise()->wait();
 });
 
 test('you can add a request or an iterator after you have created the pool', function () {
 
 });
 
-test('the guzzle way', function () {
+test('the saloon way', function () {
     $requests = function ($total) {
         for ($i = 0; $i < $total; $i++) {
             yield new UserRequest;
         }
     };
 
-    $pool = Pool::make($requests(10))
-        ->onSuccess(function ($res, $index) {
-            ray($index, $res->json());
-        })
-        ->onFailure(function ($res, $index) {
-            ray($index, $res)->red();
-        })
-        ->setConcurrency(5);
+    $options = [
+        'fulfilled' => function ($response, $index) {
+            // this is delivered each successful response
+            ray($index, $response);
+        },
+        'rejected' => function ($reason, $index) {
+            ray($index, $reason)->red();
+        },
+    ];
+
+    $pool = new PoolNew($requests(10), null, $options);
 
     $promise = $pool->promise();
 
-// Force the pool of requests to complete.
+    // Force the pool of requests to complete.
     $promise->wait();
 });
 
